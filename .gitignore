@@ -1,0 +1,43 @@
+# vim swp files
+.vimrc
+*.swp
+
+# OSX os files
+.DS_Store
+.DS_Store?
+
+# SASS
+.sass-cache
+*.css.map
+
+# intellij
+.idea
+
+# python
+*.pyc
+
+# Ruff
+.ruff_cache/
+
+
+# uv
+.uv_cache/
+
+# Unit test / coverage reports /builds
+htmlcov/
+agent_poc.zip
+agent_poc.egg-info/
+uv.lock/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
