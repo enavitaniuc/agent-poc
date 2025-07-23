@@ -4,39 +4,41 @@ import json
 from openai import OpenAI
 from tool_registry import get_registered_function_specs, get_tool_by_name
 from agent_planner import run_declarative_planner
+from openai.types.chat import ChatCompletionMessage
 import tools # need for tool discovery
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-_prompt_cache: dict[str, bool] = {}
+_prompt_cache: dict[str, bool] = {}  # Cache cleared - delete operations are multi-step
 
 # Decide if the prompt is multi-step (LLM classifier)
 def is_multi_step_prompt(prompt: str) -> bool:
+    # Check cache first
     if prompt in _prompt_cache:
+        print(f"🔍 Cache hit for: {prompt} → {_prompt_cache[prompt]}")
         return _prompt_cache[prompt]
-
-    tool_summaries = ", ".join([tool["name"] for tool in FUNCTION_SPECS])  # short version
-
-    examples = """
-        Examples:
-        "Find user Alice" → {"multi_step": false}
-        "Create Bob then increase salary" → {"multi_step": true}
-        "If Ana exists, update salary" → {"multi_step": true}
-        "Delete user Andrea" → {"multi_step": false}
-     """
-
+        
+    # Use LLM for all classification - it's better at intent recognition
     system_message = (
-        "You are a classifier. Decide whether a user's request requires multiple tool calls "
-        "(e.g., find + update) or just one.\n\n"
-        f"Tools available: {tool_summaries}\n\n"
-        "Reply only with JSON: {\"multi_step\": true} or {\"multi_step\": false}.\n"
-        f"{examples}"
+        "Classify user intent. Return ONLY valid JSON in this exact format.\n\n"
+        "Multi-step (true): Intent to CHANGE or REMOVE an existing user\n"
+        "Single-step (false): Intent to FIND or CREATE users\n\n"
+        "REQUIRED FORMAT:\n"
+        '{"multi_step": true} or {"multi_step": false}\n\n'
+        "Examples:\n"
+        '"update Bob salary" → {"multi_step": true}\n'
+        '"nuke user Alice" → {"multi_step": true}\n'
+        '"find John" → {"multi_step": false}\n'
+        '"create Mary" → {"multi_step": false}\n\n'
+        "CRITICAL: No explanations, no other text, only the JSON object above."
     )
 
     messages = [
         {"role": "system", "content": system_message},
         {"role": "user", "content": prompt}
     ]
+    
+    print(f"🔍 Classifier prompt: {prompt}")
 
     try:
         response = client.chat.completions.create(
@@ -44,12 +46,17 @@ def is_multi_step_prompt(prompt: str) -> bool:
             messages=messages,
             temperature=0,
         )
-        result = json.loads(response.choices[0].message.content).get("multi_step", False)
-    except Exception:
-        result = False
-
-    _prompt_cache[prompt] = result
-    return result
+        raw_response = response.choices[0].message.content
+        print(f"🤖 Classifier raw response: {raw_response}")
+        result = json.loads(raw_response).get("multi_step", False)
+        print(f"🤖 LLM classifier decision for '{prompt}': {result}")
+        _prompt_cache[prompt] = result
+        return result
+    except Exception as e:
+        print(f"⚠️ LLM classifier error: {e}")
+        # Default to false if LLM fails
+        _prompt_cache[prompt] = False
+        return False
 
 # Run using standard OpenAI tool calling
 def run_simple_tool_agent(prompt: str):
@@ -58,7 +65,7 @@ def run_simple_tool_agent(prompt: str):
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
-            {"role": "system", "content": "You are a helpful assistant who solves user-related requests using tools."},
+            {"role": "system", "content": "You must use the available tools to fulfill user requests. Always make a function call - do not ask for more information. If salary is not specified, use 0 as the default salary value."},
             {"role": "user", "content": prompt}
         ],
         functions=functions,

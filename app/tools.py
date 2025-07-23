@@ -5,24 +5,24 @@ from tool_registry import register_tool
 fake_db: Dict[int, Dict[str, Union[str, int]]] = {}
 user_id_counter = 1
 
-@register_tool(
-    name="plan_user_actions",
-    description="Break down a high-level user request into a list of tool steps to execute.",
-    parameters={
-        "type": "object",
-        "properties": {
-            "prompt": {
-                "type": "string",
-                "description": "The full natural language request from the user."
-            }
-        },
-        "required": ["prompt"]
-    },
-    example="If user Bob exists add 500 to his salary, otherwise create him and set his salary to 500."
-)
-def plan_user_actions(input: dict) -> dict:
-    prompt = input.get("prompt", "")
-    return extract_user_intent(prompt)
+# @register_tool(
+#     name="plan_user_actions",
+#     description="Break down a high-level user request into a list of tool steps to execute.",
+#     parameters={
+#         "type": "object",
+#         "properties": {
+#             "prompt": {
+#                 "type": "string",
+#                 "description": "The full natural language request from the user."
+#             }
+#         },
+#         "required": ["prompt"]
+#     },
+#     example="If user Bob exists add 500 to his salary, otherwise create him and set his salary to 500."
+# )
+# def plan_user_actions(input: dict) -> dict:
+#     prompt = input.get("prompt", "")
+#     return extract_user_intent(prompt)
 
 
 # Simulated in-memory user database
@@ -140,16 +140,15 @@ def update_user_salary(args: dict) -> dict:
 
 @register_tool(
     name="delete_user",
-    description="Delete a user by name or ID.",
+    description="Delete a user by ID.",
     parameters={
         "type": "object",
         "properties": {
-            "name": {"type": "string"},
             "user_id": {"type": "integer"}
         },
-        "required": []
+        "required": ["user_id"]
     },
-    example="Delete user named Bob"
+    example="Delete user with Id"
 )
 def delete_user(args: dict) -> dict:
     uid = args.get("user_id")
@@ -161,4 +160,4 @@ def delete_user(args: dict) -> dict:
             return {**message(f"🗑️ Deleted user with ID {uid}"), **ok()}
         return {**message(f"❌ No user found with ID {uid}"), **fail()}
 
-    return {**message("❌ Please provide a name for user. Example: 'Delete user named Alice'"), **fail()}
+    return {**message("❌ Please provide an ID for user. Example: 'Delete user  1234'"), **fail()}
