@@ -2,7 +2,7 @@
 import os
 import json
 from openai import OpenAI
-from tool_registry import get_registered_function_specs, get_tool_by_name, FUNCTION_SPECS
+from tool_registry import get_registered_function_specs, get_tool_by_name
 from agent_planner import run_declarative_planner
 import tools # need for tool discovery
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -64,10 +64,10 @@ def run_simple_tool_agent(prompt: str):
         functions=functions,
         function_call="auto"
     )
-    msg = response.choices[0].message
-
-    if msg.function_call is None:
-       return {"response": msg.content or "🤷 I didn’t understand that."}
+    msg: ChatCompletionMessage = response.choices[0].message
+    print(f"got from LLM: >>>>>>{msg}")
+    if not msg.function_call:
+        return {"response": msg.content or "🤷 I didn't understand that."}
     func_call = msg.function_call
     tool_name = func_call.name
     args = json.loads(func_call.arguments)

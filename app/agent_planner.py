@@ -18,7 +18,7 @@ DECLARATIVE_PLANS = {
         "description": "Create a user, then update their wage.",
         "variables": ["name", "amount"],
         "plan": [
-            {"tool": "create_user", "args": {"name": "{name}", "salary": "{amount}"}},
+            {"tool": "create_user", "args": {"name": "{name}", "salary": 0}},
             {"tool": "find_user_by_name", "args": {"name": "{name}"}},
             {"tool": "update_user_salary", "args": {"user_id": "$.1._internal.user_id", "amount": "{amount}"}}
         ]
@@ -28,7 +28,7 @@ DECLARATIVE_PLANS = {
         "variables": ["name"],
         "plan": [
             {"tool": "find_user_by_name", "args": {"name": "{name}"}},
-            {"tool": "update_user_salary", "args": {"user_id": "$.0._internal.user_id", "amount": "{amount}"}}
+            {"tool": "delete_user", "args": {"user_id": "$.0._internal.user_id"}}
         ]
     }
 }
@@ -62,15 +62,31 @@ def choose_plan_with_llm(prompt: str):
     return json.loads(response.choices[0].message.content.strip())
 
 # Resolve step args, including user input vars and outputs from previous steps
-def resolve_args(arg_dict, context):
+def resolve_args(arg_dict, results, input_vars):
     resolved = {}
     for key, val in arg_dict.items():
         if isinstance(val, str):
             if val.startswith("$."):
-                step_idx, field = val[2:].split(".")
-                resolved[key] = context[int(step_idx)].get(field)
+                try:
+                    parts = val[2:].split(".")
+                    step_idx = int(parts[0])
+                    if 0 <= step_idx < len(results):
+                        result = results[step_idx]
+                        # Traverse nested fields like "_internal.user_id"
+                        for field_part in parts[1:]:
+                            if isinstance(result, dict) and field_part in result:
+                                result = result[field_part]
+                            else:
+                                result = None
+                                break
+                        resolved[key] = result
+                    else:
+                        resolved[key] = None
+                except (ValueError, IndexError):
+                    resolved[key] = None
             elif val.startswith("{") and val.endswith("}"):
-                resolved[key] = context["input"].get(val.strip("{}"))
+                var_name = val.strip("{}")
+                resolved[key] = input_vars.get(var_name)
             else:
                 resolved[key] = val
         else:
@@ -80,19 +96,15 @@ def resolve_args(arg_dict, context):
 # Execute steps defined in the selected plan
 def execute_plan(plan_steps, user_input_vars):
     results = []
-    context = {"input": user_input_vars}
     for step in plan_steps:
         tool_name = step["tool"]
         raw_args = step["args"]
-        args = resolve_args(raw_args, results + [context])
+        args = resolve_args(raw_args, results, user_input_vars)
         tool_fn = get_tool_by_name(tool_name)
         output = tool_fn(args)
-        if output & output.get("status", "fail") == "fail":
+        if output and output.get("status", "fail") == "fail":
             return output.get("message")
-        try:
-            results.append(json.loads(output.get("message")))
-        except Exception:
-            results.append({"output": output})
+        results.append(output)
     return results
 
 # Main entry to use declarative planner
