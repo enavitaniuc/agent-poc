@@ -3,7 +3,7 @@ FUNCTION_SPECS = []
 
 
 def register_tool(name: str, description: str, parameters: dict, example: str = None):
-    print(f"register invoked for: {name}, {description} {parameters}, {example}")
+    print(f"<<<-----registering tool {name}----->>>")
     if example:
         description = f"{description} Example: {example}"
     def decorator(func):

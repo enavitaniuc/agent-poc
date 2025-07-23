@@ -89,7 +89,7 @@ def _internal(**kwargs) -> dict:
 def create_user(args: dict) -> dict:
     name = args.get("name")
     salary = args.get("salary")
-
+    print(f">>>>inside the create_user {name} {salary}")
     if not name:
         return {**message("❌ Please provide a name. Example: 'Create user Alice with salary 50000'"), **fail()}
     if salary is None:

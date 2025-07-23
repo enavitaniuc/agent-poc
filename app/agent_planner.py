@@ -38,15 +38,27 @@ def choose_plan_with_llm(prompt: str):
     plan_descriptions = "\n".join(
         f"{name}: {meta['description']}" for name, meta in DECLARATIVE_PLANS.items()
     )
+
+    system_message = (
+        "You are a strict planner.\n"
+        "Your task is to choose **one** of the following plan names and extract any required variables from the user prompt.\n\n"
+        f"Plans:\n{plan_descriptions}\n\n"
+        "Respond ONLY in valid JSON with this structure:\n"
+        "{ \"plan\": \"plan_name\", \"variables\": { ... } }\n\n"
+        "Do not explain, comment, or ask follow-up questions. Only return the JSON plan."
+    )
+
     messages = [
-        {"role": "system", "content": f"Choose a plan and extract variables.\n{plan_descriptions}"},
+        {"role": "system", "content": system_message},
         {"role": "user", "content": prompt}
     ]
+
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=messages,
         temperature=0,
     )
+
     return json.loads(response.choices[0].message.content.strip())
 
 # Resolve step args, including user input vars and outputs from previous steps
@@ -86,7 +98,7 @@ def execute_plan(plan_steps, user_input_vars):
 # Main entry to use declarative planner
 def run_declarative_planner(prompt: str):
     plan_info = choose_plan_with_llm(prompt)
-    plan = DECLARATIVE_PLANS[plan_info["plan_name"]]
+    plan = DECLARATIVE_PLANS[plan_info["plan"]]
     steps = plan["plan"]
     variables = plan_info["variables"]
     result = execute_plan(steps, variables)
