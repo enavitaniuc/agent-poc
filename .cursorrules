@@ -1,0 +1,190 @@
+# Cursor IDE Instructions for Agentic POC Project
+
+## Project Overview
+This is a Python-based agentic AI system that demonstrates tool orchestration and planning capabilities. The system uses OpenAI's API to create intelligent agents that can execute predefined tools and plans based on natural language input.
+
+## Technology Stack & Architecture
+- **Language**: Python 3.13+
+- **AI Provider**: OpenAI API
+- **Package Manager**: uv (modern Python package manager)
+- **Linting/Formatting**: Ruff
+- **Testing**: pytest with asyncio support
+- **Architecture Pattern**: Tool Registry with Declarative Planning
+
+## Code Style & Standards
+
+### Python Style Guidelines
+- Use **double quotes** for strings (configured in ruff)
+- Follow **PEP 8** naming conventions except where explicitly ignored
+- Maximum line length: 120 characters
+- Use **type hints** extensively with proper imports from `typing`
+- Use **dataclasses** or **Pydantic models** for structured data
+
+### Import Organization
+```python
+# Standard library imports first
+import json
+from typing import Dict, Optional, Union
+
+# Third-party imports
+from openai import OpenAI
+from pydantic import BaseModel
+
+# Local imports last
+from app.tool_registry import register_tool
+from app.planner_tool import extract_user_intent
+```
+
+## Project-Specific Patterns
+
+### Tool Registration Pattern
+Always use the `@register_tool` decorator for new tools:
+
+```python
+@register_tool(
+    name="tool_name",
+    description="Clear description of what this tool does",
+    parameters={
+        "type": "object",
+        "properties": {
+            "param_name": {
+                "type": "string|number|boolean",
+                "description": "Description of the parameter"
+            }
+        },
+        "required": ["param_name"]
+    },
+    example="Example usage description"
+)
+def tool_function(args: dict) -> dict:
+    # Tool implementation
+    pass
+```
+
+### Response Format for Tools
+Tools should return structured responses with these patterns:
+- Success: `{**message("✅ Success message"), **success(data)}`
+- Failure: `{**message("❌ Error message"), **fail()}`
+- Include `_internal` data for chaining: `{"_internal": {"user_id": id}, ...}`
+
+### Declarative Plans Structure
+When adding new plans to `DECLARATIVE_PLANS`:
+
+```python
+"plan_name": {
+    "description": "Clear description of what this plan accomplishes",
+    "variables": ["var1", "var2"],  # Exact variable names required
+    "plan": [
+        {"tool": "tool_name", "args": {"param": "{var1}"}},
+        {"tool": "next_tool", "args": {"id": "$.0._internal.user_id"}}  # Reference previous results
+    ]
+}
+```
+
+### Variable Substitution Rules
+- Use `{variable_name}` for direct variable substitution
+- Use `$.index._internal.field` to reference previous tool results
+- Index is 0-based referring to previous steps in the plan
+
+## File Organization
+
+### Core Components
+- `agent_planner.py`: Contains declarative plans and LLM-based plan selection
+- `agent_runner.py`: Main execution engine and CLI interface
+- `tools.py`: Individual tool implementations with `@register_tool`
+- `tool_registry.py`: Registry system for discovering and managing tools
+- `planner_tool.py`: LLM-based planning utilities
+
+### Adding New Features
+
+#### New Tools
+1. Add to `tools.py` with proper `@register_tool` decorator
+2. Follow the established parameter structure
+3. Include clear descriptions and examples
+4. Return structured responses with `message()` and status helpers
+
+#### New Plans
+1. Add to `DECLARATIVE_PLANS` in `agent_planner.py`
+2. Test variable substitution and tool chaining
+3. Update the plan selection LLM prompt if needed
+
+#### New Dependencies
+1. Add to `pyproject.toml` under `dependencies` or `dev` optional dependencies
+2. Run `make sync` to update `uv.lock`
+
+## Development Workflow
+
+### Environment Setup
+```bash
+make dev-setup  # Sets up uv environment with Python 3.13
+source .venv/bin/activate  # Activate environment
+```
+
+### Running & Testing
+```bash
+make run        # Run the main application
+make test       # Run pytest suite
+make coverage   # Run tests with coverage report
+```
+
+### Code Quality
+- Ruff is configured for linting and formatting
+- Pre-commit hooks are available in dev dependencies
+- Use `uv run ruff check .` and `uv run ruff format .` for code quality
+
+## AI Integration Patterns
+
+### OpenAI Client Usage
+- Use the global `client = OpenAI()` pattern
+- Handle API errors gracefully with try/catch blocks
+- Include system messages for better prompt engineering
+- Use structured outputs when possible
+
+### Error Handling
+```python
+try:
+    # OpenAI API call
+    response = client.chat.completions.create(...)
+except Exception as e:
+    return {**message(f"❌ AI Error: {str(e)}"), **fail()}
+```
+
+### JSON Parsing for LLM Responses
+Always validate and parse LLM JSON responses safely:
+```python
+try:
+    result = json.loads(response.choices[0].message.content)
+    # Validate required fields
+    if not all(key in result for key in ["plan", "variables"]):
+        raise ValueError("Missing required fields")
+except (json.JSONDecodeError, ValueError) as e:
+    # Handle parsing errors
+    pass
+```
+
+## Environment Variables
+- `OPENAI_API_KEY`: Required for OpenAI API access
+- Use `python-dotenv` for local development
+- Set via `scripts/set_env_vars.sh` when running
+
+## Security & Best Practices
+- Never log or expose API keys
+- Validate all user inputs before processing
+- Use type hints for better IDE support and error catching
+- Keep tool functions pure and testable
+- Document complex tool interactions and dependencies
+
+## When Adding New Code
+1. **Follow the existing patterns** shown in current files
+2. **Use type hints** for all function parameters and return types
+3. **Add proper error handling** with structured responses
+4. **Include descriptive docstrings** for complex functions
+5. **Test new tools** both individually and in plans
+6. **Update this file** if introducing new architectural patterns
+
+## Debugging Tips
+- Use `print()` statements in tool functions for debugging
+- Check `fake_db` state for user management tools
+- Validate JSON parsing in LLM responses
+- Test variable substitution in plans manually
+- Use the example requests in tool descriptions for testing
